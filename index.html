@@ -1,0 +1,1832 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DocuCrop PDF — Sequential Image to PDF Builder & Compressor</title>
+  <!-- Google Fonts: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Cropper.js CSS & JS via CDN -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.2/cropper.min.css" crossorigin="anonymous" referrerpolicy="no-referrer" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.2/cropper.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <!-- jsPDF via CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <!-- SortableJS for smooth drag-and-drop & touch reordering -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.2/Sortable.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+          },
+          colors: {
+            brand: {
+              50: '#eef2ff',
+              100: '#e0e7ff',
+              200: '#c7d2fe',
+              500: '#6366f1',
+              600: '#4f46e5',
+              700: '#4338ca',
+              900: '#312e81',
+            }
+          }
+        }
+      }
+    };
+  </script>
+
+  <style>
+    /* Custom scrollbar & Cropper polish */
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      background-color: #f8fafc;
+      color: #0f172a;
+    }
+    .cropper-container {
+      max-height: 58vh !important;
+      width: 100% !important;
+    }
+    .cropper-view-box,
+    .cropper-face {
+      border-radius: 2px;
+    }
+    .cropper-line,
+    .cropper-point {
+      background-color: #4f46e5 !important;
+    }
+    .cropper-point {
+      width: 10px !important;
+      height: 10px !important;
+      opacity: 0.95 !important;
+    }
+    /* Custom range slider */
+    input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      background: transparent;
+      cursor: pointer;
+    }
+    input[type="range"]::-webkit-slider-runnable-track {
+      height: 8px;
+      border-radius: 999px;
+      background: #e2e8f0;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      margin-top: -6px;
+      background-color: #4f46e5;
+      height: 20px;
+      width: 20px;
+      border-radius: 999px;
+      border: 3px solid #ffffff;
+      box-shadow: 0 2px 6px rgba(79, 70, 229, 0.4);
+      transition: transform 0.15s ease;
+    }
+    input[type="range"]::-webkit-slider-thumb:hover {
+      transform: scale(1.1);
+    }
+    .sortable-ghost {
+      opacity: 0.4;
+      background: #eef2ff;
+      border: 2px dashed #6366f1;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col antialiased selection:bg-brand-100 selection:text-brand-900">
+
+  <!-- Hidden File Input (Single image mode for sequential workflow) -->
+  <input type="file" id="singleFileInput" accept="image/jpeg,image/png,image/webp,image/*" class="hidden" />
+  <!-- Hidden Multi-File Input (Optional batch drop support that queues sequentially) -->
+  <input type="file" id="multiFileInput" accept="image/jpeg,image/png,image/webp,image/*" multiple class="hidden" />
+
+  <!-- Top Navigation Header -->
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-30">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 py-3.5 flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-brand-600 text-white flex items-center justify-center shadow-sm shadow-brand-600/20">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="text-lg font-bold tracking-tight text-slate-900">DocuCrop PDF</h1>
+            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+              100% Client-Side &bull; Local Processing
+            </span>
+          </div>
+          <p class="text-xs text-slate-500">Sequential Image Cropper, Document Enhancer &amp; Target-Size PDF Builder</p>
+        </div>
+      </div>
+
+      <!-- Privacy Badge -->
+      <div class="flex items-center gap-1.5 text-xs font-medium text-slate-600 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200">
+        <svg class="w-4 h-4 text-emerald-600 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+        </svg>
+        <span>Zero Server Uploads &bull; Files Stay in Browser</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Toast / Notification Banner -->
+  <div id="toastContainer" class="fixed bottom-4 right-4 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none px-4 sm:px-0"></div>
+
+  <!-- Main Workspace -->
+  <main class="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-8">
+
+    <!-- Dynamic Interactive Step Tracker -->
+    <div class="mb-6 bg-white rounded-2xl border border-slate-200 p-3 sm:p-4 shadow-sm">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div class="flex flex-wrap items-center gap-2 sm:gap-4 text-xs sm:text-sm">
+          <!-- Step 1 -->
+          <button type="button" id="stepItem1" onclick="setActiveStep(1)" class="step-pill flex items-center gap-2 px-3 py-1.5 rounded-xl font-semibold bg-brand-50 text-brand-700 border border-brand-200 transition-all">
+            <span id="stepBadge1" class="w-6 h-6 rounded-full bg-brand-600 text-white flex items-center justify-center text-xs font-bold transition-colors">1</span>
+            <span>Upload &amp; Crop One-by-One</span>
+          </button>
+
+          <svg class="w-4 h-4 text-slate-300 hidden sm:block" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+
+          <!-- Step 2 -->
+          <button type="button" id="stepItem2" onclick="setActiveStep(2)" class="step-pill flex items-center gap-2 px-3 py-1.5 rounded-xl font-medium text-slate-600 border border-transparent hover:bg-slate-50 transition-all">
+            <span id="stepBadge2" class="w-6 h-6 rounded-full bg-slate-100 text-slate-700 flex items-center justify-center text-xs font-bold transition-colors">2</span>
+            <span>Verify Order (1, 2, 3...)</span>
+          </button>
+
+          <svg class="w-4 h-4 text-slate-300 hidden sm:block" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+
+          <!-- Step 3 -->
+          <button type="button" id="stepItem3" onclick="setActiveStep(3)" class="step-pill flex items-center gap-2 px-3 py-1.5 rounded-xl font-medium text-slate-600 border border-transparent hover:bg-slate-50 transition-all">
+            <span id="stepBadge3" class="w-6 h-6 rounded-full bg-slate-100 text-slate-700 flex items-center justify-center text-xs font-bold transition-colors">3</span>
+            <span>Set Target Size &amp; Create PDF</span>
+          </button>
+        </div>
+
+        <div id="activeStepHint" class="text-xs font-medium text-slate-500 hidden md:block">
+          Active: <span class="text-brand-600 font-semibold">Step 1 &mdash; Upload &amp; Crop</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Empty State Dropzone (Shown when 0 pages exist) -->
+    <div id="emptyStateContainer" class="bg-white rounded-3xl border-2 border-dashed border-slate-300 hover:border-brand-500 transition-colors p-8 sm:p-14 text-center shadow-sm">
+      <div class="max-w-md mx-auto">
+        <div class="w-16 h-16 rounded-2xl bg-brand-50 text-brand-600 flex items-center justify-center mx-auto mb-5">
+          <svg class="w-8 h-8" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+          </svg>
+        </div>
+        <h2 class="text-xl sm:text-2xl font-bold text-slate-900 mb-2">Start Building Your PDF</h2>
+        <p class="text-sm text-slate-600 mb-6 leading-relaxed">
+          Select your first image (JPEG, PNG, or WebP). You will immediately crop it, then choose whether to add the next image or finish and create your PDF.
+        </p>
+        <div class="flex flex-col sm:flex-row items-center justify-center gap-3">
+          <button onclick="triggerSingleUpload()" class="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-2xl bg-brand-600 hover:bg-brand-700 text-white font-semibold text-sm shadow-md shadow-brand-600/20 transition transform active:scale-98">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+            </svg>
+            <span>Add Image (Page 1)</span>
+          </button>
+          <button onclick="triggerMultiUpload()" class="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3.5 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium text-sm transition">
+            <span>Select Multiple & Crop Sequentially</span>
+          </button>
+        </div>
+        <p class="mt-4 text-xs text-slate-400">Supports drag & drop anywhere on this box</p>
+      </div>
+    </div>
+
+    <!-- Active Workspace (Shown once >= 1 page is cropped & added) -->
+    <div id="activeWorkspace" class="hidden grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+
+      <!-- Left Column: Ordered Pages List (7 cols on lg) -->
+      <div id="orderSectionPanel" class="lg:col-span-7 bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden transition-all">
+        <div class="p-5 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3 bg-slate-50/60">
+          <div>
+            <h2 class="text-base font-bold text-slate-900 flex items-center gap-2">
+              <span>Document Pages</span>
+              <span id="pageCountBadge" class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-brand-100 text-brand-700">0 Pages</span>
+            </h2>
+            <p class="text-xs text-slate-500 mt-0.5">Drag cards, use Reorder arrows, or jump to position (1, 2, 3...)</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <button onclick="clearAllPages()" class="px-3 py-2 rounded-xl text-xs font-medium text-rose-600 hover:bg-rose-50 transition">
+              Clear All
+            </button>
+            <button onclick="triggerMultiUpload()" class="inline-flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition" title="Select multiple images to crop sequentially">
+              <span>+ Batch Add</span>
+            </button>
+            <button onclick="triggerSingleUpload()" class="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs sm:text-sm font-semibold shadow-sm transition">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.4" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+              </svg>
+              <span>Add Image</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Reordering & Live Filter Preview Banner -->
+        <div class="px-5 py-2.5 bg-brand-50/70 border-b border-brand-100 flex flex-wrap items-center justify-between gap-2 text-xs text-brand-900">
+          <span class="font-medium">Order: <strong>Page 1 &rarr; Page N</strong>. Use <strong>Reorder</strong> arrows or drag cards.</span>
+          <button type="button" onclick="openPageCompareModal(0)" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white hover:bg-brand-100 text-brand-700 border border-brand-200 font-semibold transition">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              <path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+            </svg>
+            <span>Compare Standard vs. Enhanced</span>
+          </button>
+        </div>
+
+        <!-- Ordered Cards Container -->
+        <div id="pagesList" class="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4 max-h-[68vh] overflow-y-auto">
+          <!-- Dynamically populated page cards -->
+        </div>
+
+        <!-- Bottom Quick Add Bar -->
+        <div class="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
+          <span class="text-xs text-slate-500">Need more pages?</span>
+          <button onclick="triggerSingleUpload()" class="inline-flex items-center gap-1.5 text-xs font-semibold text-brand-600 hover:text-brand-700">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+            <span>+ Upload &amp; Crop Page <span id="nextPageNumberHint">2</span></span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Right Column: Target Size, Mode Selection & PDF Generation Controls (5 cols on lg) -->
+      <div id="pdfSettingsPanel" class="lg:col-span-5 space-y-5 sticky top-24">
+        <div class="bg-white rounded-3xl border border-slate-200 p-5 sm:p-6 shadow-sm transition-all">
+          <h2 class="text-base font-bold text-slate-900 mb-1">Target PDF Output Size</h2>
+          <p class="text-xs text-slate-500 mb-4">Choose your maximum allowed file size (100 KB to 10 MB)</p>
+
+          <!-- Quick Size Presets -->
+          <div class="grid grid-cols-4 gap-2 mb-4" id="sizePresetsGrid">
+            <button type="button" data-kb="100" onclick="setTargetSizeKB(100, true)" class="size-preset-btn py-2 px-2 rounded-xl text-xs font-semibold border border-slate-200 hover:border-brand-500 transition">100 KB</button>
+            <button type="button" data-kb="250" onclick="setTargetSizeKB(250, true)" class="size-preset-btn py-2 px-2 rounded-xl text-xs font-semibold border border-slate-200 hover:border-brand-500 transition">250 KB</button>
+            <button type="button" data-kb="500" onclick="setTargetSizeKB(500, true)" class="size-preset-btn py-2 px-2 rounded-xl text-xs font-semibold border border-slate-200 hover:border-brand-500 transition">500 KB</button>
+            <button type="button" data-kb="1024" onclick="setTargetSizeKB(1024, true)" class="size-preset-btn py-2 px-2 rounded-xl text-xs font-semibold border border-slate-200 hover:border-brand-500 transition">1 MB</button>
+            <button type="button" data-kb="1536" onclick="setTargetSizeKB(1536, true)" class="size-preset-btn py-2 px-2 rounded-xl text-xs font-semibold border border-slate-200 hover:border-brand-500 transition">1.5 MB</button>
+            <button type="button" data-kb="2048" onclick="setTargetSizeKB(2048, true)" class="size-preset-btn py-2 px-2 rounded-xl text-xs font-semibold border border-slate-200 hover:border-brand-500 transition">2 MB</button>
+            <button type="button" data-kb="5120" onclick="setTargetSizeKB(5120, true)" class="size-preset-btn py-2 px-2 rounded-xl text-xs font-semibold border border-slate-200 hover:border-brand-500 transition">5 MB</button>
+            <button type="button" data-kb="10240" onclick="setTargetSizeKB(10240, true)" class="size-preset-btn py-2 px-2 rounded-xl text-xs font-semibold border border-slate-200 hover:border-brand-500 transition">10 MB</button>
+          </div>
+
+          <!-- Custom Slider + Exact Numeric Input -->
+          <div class="bg-slate-50 rounded-2xl p-4 border border-slate-200/80 mb-4">
+            <div class="flex items-center justify-between mb-2">
+              <label for="targetSizeSlider" class="text-xs font-semibold text-slate-700">Custom Target Limit</label>
+              <span id="formattedTargetDisplay" class="text-sm font-bold text-brand-600 bg-brand-50 px-2.5 py-0.5 rounded-lg border border-brand-200">1.00 MB (1,024 KB)</span>
+            </div>
+            <!-- Logarithmic-feel slider mapped 0..1000 -> 100 KB .. 10240 KB -->
+            <input type="range" id="targetSizeSlider" min="0" max="1000" value="500" class="w-full my-2" oninput="handleSliderInput(this.value)" />
+            <div class="flex justify-between text-[11px] text-slate-400 font-medium mb-3">
+              <span>100 KB</span>
+              <span>1 MB</span>
+              <span>5 MB</span>
+              <span>10 MB</span>
+            </div>
+
+            <!-- Manual Numeric Input -->
+            <div class="flex items-center gap-2">
+              <input type="number" id="customSizeNumber" min="100" max="10240" step="10" value="1024" oninput="handleManualNumberInput()" class="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500" />
+              <select id="customSizeUnit" onchange="handleManualUnitChange()" class="px-3 py-2 rounded-xl border border-slate-300 bg-white text-sm font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500">
+                <option value="KB" selected>KB</option>
+                <option value="MB">MB</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Smart Guidance Box -->
+          <div id="compressionGuidanceBox" class="rounded-2xl p-3.5 text-xs mb-4 bg-blue-50 text-blue-800 border border-blue-200 flex items-start gap-2.5">
+            <svg class="w-4 h-4 shrink-0 mt-0.5 text-blue-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <div id="compressionGuidanceText">Balanced quality (~512 KB per page). Crisp text and clean photos.</div>
+          </div>
+
+          <!-- Page Layout & Filename Settings -->
+          <div class="space-y-3 mb-5">
+            <div>
+              <label for="pdfPageFormat" class="block text-xs font-semibold text-slate-700 mb-1">PDF Page Sizing</label>
+              <select id="pdfPageFormat" onchange="setActiveStep(3); invalidateGeneratedPdf();" class="w-full px-3 py-2.5 rounded-xl border border-slate-300 bg-white text-xs sm:text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500">
+                <option value="a4-fit" selected>A4 Standard (Auto Portrait/Landscape Fit)</option>
+                <option value="a4-portrait">A4 Portrait (Fixed Vertical with Clean Margins)</option>
+                <option value="match-image">Exact Image Aspect Ratio (No White Borders)</option>
+              </select>
+            </div>
+            <div>
+              <label for="pdfFilename" class="block text-xs font-semibold text-slate-700 mb-1">Output Filename</label>
+              <div class="flex items-center">
+                <input type="text" id="pdfFilename" onfocus="setActiveStep(3)" value="Consolidated_Document" placeholder="Document_Name" class="w-full px-3 py-2.5 rounded-l-xl border border-slate-300 bg-white text-xs sm:text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500" />
+                <span class="px-3 py-2.5 rounded-r-xl border border-l-0 border-slate-300 bg-slate-100 text-xs sm:text-sm font-semibold text-slate-600">.pdf</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Two PDF Creation Mode Options -->
+          <div class="mb-4">
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-xs font-bold uppercase tracking-wider text-slate-500">Choose PDF Generation Mode</span>
+              <button type="button" onclick="openPageCompareModal(0)" class="text-xs font-semibold text-brand-600 hover:text-brand-700 underline">
+                Preview Enhancement
+              </button>
+            </div>
+
+            <div class="space-y-2.5">
+              <!-- Option 1: Create Standard PDF -->
+              <div onclick="selectPdfMode('standard')" id="modeCardStandard" class="p-3.5 rounded-2xl border-2 border-brand-600 bg-brand-50/40 cursor-pointer transition-all">
+                <div class="flex items-start justify-between gap-2">
+                  <div class="flex items-start gap-2.5">
+                    <div id="modeRadioStandard" class="w-4 h-4 mt-0.5 rounded-full border-4 border-brand-600 bg-white shrink-0"></div>
+                    <div>
+                      <h3 class="text-xs sm:text-sm font-bold text-slate-900">Option 1: Standard PDF (As Cropped)</h3>
+                      <p class="text-[11px] text-slate-600 mt-0.5 leading-relaxed">Consolidates your cropped images directly in exact order while matching your target file size.</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Option 2: Create Enhanced Document PDF -->
+              <div onclick="selectPdfMode('enhanced')" id="modeCardEnhanced" class="p-3.5 rounded-2xl border-2 border-slate-200 hover:border-brand-400 bg-white cursor-pointer transition-all">
+                <div class="flex items-start justify-between gap-2">
+                  <div class="flex items-start gap-2.5">
+                    <div id="modeRadioEnhanced" class="w-4 h-4 mt-0.5 rounded-full border-2 border-slate-300 bg-white shrink-0"></div>
+                    <div>
+                      <div class="flex items-center gap-1.5 flex-wrap">
+                        <h3 class="text-xs sm:text-sm font-bold text-slate-900">Option 2: Enhanced Document PDF</h3>
+                        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-700">Shadow Removal + Crisp Text</span>
+                      </div>
+                      <p class="text-[11px] text-slate-600 mt-0.5 leading-relaxed">Removes uneven gray scan shadows &amp; dull backgrounds while keeping all text, ink, and details sharp and intact.</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Dual Action Buttons: Create Standard PDF & Create Enhanced PDF -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            <button id="createStandardPdfBtn" onclick="generateCompressedPDF('standard')" class="py-3 px-3.5 rounded-2xl bg-slate-800 hover:bg-slate-900 disabled:bg-slate-400 text-white font-bold text-xs sm:text-sm shadow-md flex items-center justify-center gap-2 transition transform active:scale-99">
+              <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              <span>Create Standard PDF</span>
+            </button>
+
+            <button id="createEnhancedPdfBtn" onclick="generateCompressedPDF('enhanced')" class="py-3 px-3.5 rounded-2xl bg-brand-600 hover:bg-brand-700 disabled:bg-slate-400 text-white font-bold text-xs sm:text-sm shadow-lg shadow-brand-600/25 flex items-center justify-center gap-2 transition transform active:scale-99">
+              <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+              </svg>
+              <span>Create Enhanced PDF</span>
+            </button>
+          </div>
+
+          <!-- Progress Indicator -->
+          <div id="progressContainer" class="hidden mt-4 bg-slate-50 rounded-2xl p-4 border border-slate-200">
+            <div class="flex items-center justify-between text-xs font-semibold text-slate-700 mb-1.5">
+              <span id="progressStatusLabel">Optimizing images...</span>
+              <span id="progressPercentLabel">0%</span>
+            </div>
+            <div class="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
+              <div id="progressBarFill" class="h-full bg-brand-600 transition-all duration-200" style="width: 0%"></div>
+            </div>
+          </div>
+
+          <!-- Generated PDF Result Card -->
+          <div id="pdfResultCard" class="hidden mt-5 rounded-2xl bg-emerald-50 border border-emerald-200 p-4">
+            <div class="flex items-start justify-between gap-3 mb-3">
+              <div class="flex items-center gap-2.5">
+                <div class="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0">
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.4" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+                <div>
+                  <div class="flex items-center gap-2">
+                    <h3 class="text-sm font-bold text-emerald-950">PDF Ready!</h3>
+                    <span id="pdfResultModeBadge" class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-200 text-emerald-900">Standard</span>
+                  </div>
+                  <p id="pdfResultStats" class="text-xs text-emerald-800 font-medium mt-0.5">Final Size: 420 KB (Target: 500 KB)</p>
+                </div>
+              </div>
+            </div>
+            <div class="flex flex-col sm:flex-row gap-2">
+              <button id="downloadPdfBtn" onclick="triggerPdfDownload()" class="flex-1 py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs sm:text-sm shadow-sm flex items-center justify-center gap-2 transition">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                <span>Download PDF</span>
+              </button>
+              <button onclick="openPdfViewerModal()" class="py-2.5 px-4 rounded-xl bg-white hover:bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 transition">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                </svg>
+                <span>Preview PDF</span>
+              </button>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- ===================================================================== -->
+  <!-- IMMEDIATE INTERACTIVE CROP MODAL (Opens right after each upload)     -->
+  <!-- ===================================================================== -->
+  <div id="cropModal" class="fixed inset-0 z-50 hidden bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4">
+    <div class="bg-white rounded-3xl max-w-4xl w-full shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[95vh]">
+
+      <!-- Modal Header -->
+      <div class="px-5 py-3.5 border-b border-slate-200 flex items-center justify-between bg-slate-50">
+        <div class="flex items-center gap-2.5">
+          <span id="cropModalPageBadge" class="px-3 py-1 rounded-full text-xs font-bold bg-brand-600 text-white">Page 1</span>
+          <h3 class="text-sm sm:text-base font-bold text-slate-900" id="cropModalTitle">Crop Image</h3>
+          <span id="queueCounterBadge" class="hidden px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800"></span>
+        </div>
+        <button onclick="cancelCurrentCrop()" class="p-2 rounded-xl text-slate-500 hover:text-slate-800 hover:bg-slate-200/70 transition" title="Cancel">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+
+      <!-- Aspect Ratio & Transform Toolbar -->
+      <div class="px-4 py-2.5 bg-white border-b border-slate-100 flex flex-wrap items-center justify-between gap-2">
+        <!-- Aspect Ratios -->
+        <div class="flex items-center gap-1.5 flex-wrap">
+          <span class="text-xs font-semibold text-slate-500 mr-1">Ratio:</span>
+          <button type="button" onclick="setCropAspectRatio(NaN, this)" class="aspect-btn active-aspect px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-brand-600 text-white">Free</button>
+          <button type="button" onclick="setCropAspectRatio(1 / 1.4142, this)" class="aspect-btn px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200">A4 Portrait</button>
+          <button type="button" onclick="setCropAspectRatio(1.4142, this)" class="aspect-btn px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200">A4 Landscape</button>
+          <button type="button" onclick="setCropAspectRatio(4 / 3, this)" class="aspect-btn px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200">4:3</button>
+          <button type="button" onclick="setCropAspectRatio(1, this)" class="aspect-btn px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200">1:1</button>
+        </div>
+
+        <!-- Rotate / Reset Tools -->
+        <div class="flex items-center gap-1.5">
+          <button type="button" onclick="rotateCropper(-90)" class="p-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium flex items-center gap-1" title="Rotate Left 90°">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"/></svg>
+            <span class="hidden sm:inline">-90°</span>
+          </button>
+          <button type="button" onclick="rotateCropper(90)" class="p-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium flex items-center gap-1" title="Rotate Right 90°">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 10H11a8 8 0 00-8 8v2m18-10l-6 6m6-6l-6-6"/></svg>
+            <span class="hidden sm:inline">+90°</span>
+          </button>
+          <button type="button" onclick="resetCropper()" class="px-2.5 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold">
+            Reset
+          </button>
+        </div>
+      </div>
+
+      <!-- Cropper Canvas Area -->
+      <div class="flex-1 bg-slate-900 flex items-center justify-center overflow-hidden min-h-[300px] sm:min-h-[380px] p-2">
+        <img id="cropperTargetImage" src="" alt="Crop Preview" class="max-w-full max-h-[56vh] block" />
+      </div>
+
+      <!-- Modal Footer: Sequential Workflow Action Buttons -->
+      <div class="p-4 sm:px-6 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3">
+        <button type="button" onclick="cancelCurrentCrop()" class="w-full sm:w-auto px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold text-slate-600 hover:bg-slate-200/70 transition">
+          Discard Image
+        </button>
+
+        <div class="w-full sm:w-auto flex flex-col sm:flex-row items-center gap-2.5">
+          <!-- Button 1: Crop & Add Next Image -->
+          <button type="button" id="cropAndNextBtn" onclick="confirmCrop(true)" class="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-brand-50 hover:bg-brand-100 text-brand-700 border border-brand-300 font-bold text-xs sm:text-sm transition">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.4" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+            </svg>
+            <span>Crop &amp; Add Next Image</span>
+          </button>
+
+          <!-- Button 2: Crop & Finish -->
+          <button type="button" id="cropAndFinishBtn" onclick="confirmCrop(false)" class="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-bold text-xs sm:text-sm shadow-md shadow-brand-600/20 transition">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.4" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+            <span>Crop &amp; Finish</span>
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- STANDARD VS. ENHANCED SCAN PREVIEW MODAL                              -->
+  <!-- ===================================================================== -->
+  <div id="compareModal" class="fixed inset-0 z-50 hidden bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4">
+    <div class="bg-white rounded-3xl max-w-5xl w-full shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[94vh]">
+      <div class="px-5 py-3.5 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2 bg-slate-50">
+        <div class="flex items-center gap-2.5">
+          <span class="px-2.5 py-1 rounded-full text-xs font-bold bg-indigo-100 text-indigo-700">Enhancement Inspector</span>
+          <h3 class="text-sm sm:text-base font-bold text-slate-900">Shadow Removal &amp; Text Clarity Preview</h3>
+        </div>
+        <div class="flex items-center gap-2">
+          <div class="flex items-center gap-1 bg-white px-2 py-1 rounded-xl border border-slate-200">
+            <button type="button" onclick="navigateComparePage(-1)" id="comparePrevBtn" class="p-1 rounded-lg hover:bg-slate-100 text-slate-700 disabled:opacity-30" title="Previous Page">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
+            </button>
+            <span id="comparePageIndicator" class="text-xs font-bold text-slate-700 px-2">Page 1 of 1</span>
+            <button type="button" onclick="navigateComparePage(1)" id="compareNextBtn" class="p-1 rounded-lg hover:bg-slate-100 text-slate-700 disabled:opacity-30" title="Next Page">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+            </button>
+          </div>
+          <button onclick="closeCompareModal()" class="p-2 rounded-xl text-slate-500 hover:text-slate-800 hover:bg-slate-200/70 transition">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="p-4 sm:p-6 overflow-y-auto bg-slate-100 flex-1 grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+        <!-- Original Cropped -->
+        <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
+          <div class="px-3.5 py-2 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+            <span class="text-xs font-bold text-slate-700">Standard (As Cropped)</span>
+            <span class="text-[11px] text-slate-400">Original Lighting</span>
+          </div>
+          <div class="p-3 flex items-center justify-center bg-slate-200/40 min-h-[260px]">
+            <img id="compareStandardImg" src="" alt="Standard Page" class="max-h-[52vh] max-w-full object-contain rounded shadow-xs" />
+          </div>
+        </div>
+
+        <!-- Enhanced Scan -->
+        <div class="bg-white rounded-2xl border-2 border-brand-500 overflow-hidden shadow-xs">
+          <div class="px-3.5 py-2 bg-brand-50 border-b border-brand-100 flex items-center justify-between">
+            <span class="text-xs font-bold text-brand-900">Enhanced Document Scan</span>
+            <span class="text-[11px] font-semibold text-brand-700">Shadows Removed &bull; Text Preserved</span>
+          </div>
+          <div class="p-3 flex items-center justify-center bg-slate-200/40 min-h-[260px]">
+            <img id="compareEnhancedImg" src="" alt="Enhanced Page" class="max-h-[52vh] max-w-full object-contain rounded shadow-xs" />
+          </div>
+        </div>
+      </div>
+
+      <div class="px-5 py-3.5 bg-white border-t border-slate-200 flex flex-wrap items-center justify-between gap-3">
+        <p class="text-xs text-slate-500">Adaptive background normalization removes uneven gray camera shadows while keeping dark ink &amp; text intact.</p>
+        <div class="flex items-center gap-2">
+          <button type="button" onclick="closeCompareModal()" class="px-4 py-2 rounded-xl text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 transition">Close</button>
+          <button type="button" onclick="closeCompareModal(); generateCompressedPDF('enhanced');" class="px-5 py-2 rounded-xl text-xs font-bold text-white bg-brand-600 hover:bg-brand-700 shadow-sm transition">
+            Create Enhanced PDF Now
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- GENERATED PDF PREVIEW & DOWNLOAD MODAL                                -->
+  <!-- ===================================================================== -->
+  <div id="pdfViewerModal" class="fixed inset-0 z-50 hidden bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4">
+    <div class="bg-white rounded-3xl max-w-5xl w-full shadow-2xl border border-slate-200 overflow-hidden flex flex-col h-[92vh]">
+      <div class="px-5 py-3.5 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2 bg-slate-50">
+        <div class="flex items-center gap-2.5">
+          <span class="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800">PDF Preview</span>
+          <h3 id="pdfViewerTitle" class="text-sm sm:text-base font-bold text-slate-900">Consolidated_Document.pdf</h3>
+          <span id="pdfViewerSizeBadge" class="text-xs font-semibold text-slate-600 bg-white px-2.5 py-0.5 rounded-lg border border-slate-200"></span>
+        </div>
+        <div class="flex items-center gap-2">
+          <button type="button" onclick="triggerPdfDownload()" class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-sm transition">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+            <span>Download PDF</span>
+          </button>
+          <button onclick="closePdfViewerModal()" class="p-2 rounded-xl text-slate-500 hover:text-slate-800 hover:bg-slate-200/70 transition">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="flex-1 bg-slate-800 overflow-hidden relative">
+        <iframe id="pdfPreviewIframe" src="" class="w-full h-full border-0" title="Generated PDF Preview"></iframe>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <footer class="mt-auto border-t border-slate-200 bg-white py-5 px-4 text-center">
+    <p class="text-xs text-slate-500">DocuCrop PDF &mdash; 100% Browser-Based Image Cropping, Document Enhancement &amp; Iterative PDF Compression.</p>
+    <p class="text-[11px] text-slate-400 mt-1.5 font-medium tracking-wide">Powered by Tech Tools and Sriraj Menon</p>
+  </footer>
+
+  <!-- ===================================================================== -->
+  <!-- APPLICATION LOGIC (Sequential Cropping, Ordering & Binary-Search PDF) -->
+  <!-- ===================================================================== -->
+  <script>
+    /**
+     * Application State
+     * pages: Array of {
+     *   id: string,
+     *   originalDataUrl: string,   // Kept so user can re-crop later without quality loss
+     *   croppedDataUrl: string,    // High-res cropped canvas output
+     *   enhancedDataUrl: string|null, // Cached shadow-removed enhanced document image
+     *   width: number,
+     *   height: number
+     * }
+     */
+    let pages = [];
+    let cropperInstance = null;
+    let currentOriginalDataUrl = null;
+    let editingPageIndex = null; // null when adding new page; integer index when re-cropping existing page
+    let pendingFileQueue = [];   // Used if user drops/selects multiple files at once
+    let batchTotalCount = 0;     // Total count in the current batch selection for "Cropping X of Y"
+    let batchProcessedCount = 0; // Completed count in current batch selection
+    let targetSizeKB = 1024;     // Default 1 MB (1024 KB)
+    let selectedPdfMode = 'standard'; // 'standard' | 'enhanced'
+    let generatedPdfBlob = null;
+    let generatedPdfUrl = null;
+    let currentStep = 1;
+    let comparePageIndex = 0;
+
+    // DOM References
+    const singleFileInput = document.getElementById('singleFileInput');
+    const multiFileInput = document.getElementById('multiFileInput');
+    const emptyStateContainer = document.getElementById('emptyStateContainer');
+    const activeWorkspace = document.getElementById('activeWorkspace');
+    const pagesList = document.getElementById('pagesList');
+    const cropModal = document.getElementById('cropModal');
+    const cropperTargetImage = document.getElementById('cropperTargetImage');
+
+    // =========================================================================
+    // DYNAMIC 3-STEP STEPPER HIGHLIGHTING
+    // =========================================================================
+
+    function setActiveStep(stepNumber) {
+      currentStep = stepNumber;
+      const stepLabels = {
+        1: 'Step 1 — Upload & Crop',
+        2: 'Step 2 — Verify Order',
+        3: 'Step 3 — Set Target Size & Create PDF'
+      };
+
+      for (let s = 1; s <= 3; s++) {
+        const pill = document.getElementById(`stepItem${s}`);
+        const badge = document.getElementById(`stepBadge${s}`);
+        if (!pill || !badge) continue;
+
+        if (s === stepNumber) {
+          pill.className = 'step-pill flex items-center gap-2 px-3 py-1.5 rounded-xl font-bold bg-brand-50 text-brand-700 border border-brand-300 shadow-xs transition-all';
+          badge.className = 'w-6 h-6 rounded-full bg-brand-600 text-white flex items-center justify-center text-xs font-bold transition-colors';
+        } else {
+          pill.className = 'step-pill flex items-center gap-2 px-3 py-1.5 rounded-xl font-medium text-slate-600 border border-transparent hover:bg-slate-50 transition-all';
+          badge.className = 'w-6 h-6 rounded-full bg-slate-100 text-slate-700 flex items-center justify-center text-xs font-bold transition-colors';
+        }
+      }
+
+      const hintEl = document.getElementById('activeStepHint');
+      if (hintEl) {
+        hintEl.innerHTML = `Active: <span class="text-brand-600 font-semibold">${stepLabels[stepNumber] || ''}</span>`;
+      }
+
+      // Subtle panel ring highlight in active workspace
+      const orderPanel = document.getElementById('orderSectionPanel');
+      const settingsPanel = document.getElementById('pdfSettingsPanel')?.firstElementChild;
+      if (orderPanel && settingsPanel) {
+        if (stepNumber === 2) {
+          orderPanel.classList.add('ring-2', 'ring-brand-500/40', 'border-brand-300');
+          settingsPanel.classList.remove('ring-2', 'ring-brand-500/40', 'border-brand-300');
+        } else if (stepNumber === 3) {
+          settingsPanel.classList.add('ring-2', 'ring-brand-500/40', 'border-brand-300');
+          orderPanel.classList.remove('ring-2', 'ring-brand-500/40', 'border-brand-300');
+        } else {
+          orderPanel.classList.remove('ring-2', 'ring-brand-500/40', 'border-brand-300');
+          settingsPanel.classList.remove('ring-2', 'ring-brand-500/40', 'border-brand-300');
+        }
+      }
+    }
+
+    // Initialize SortableJS for smooth drag-and-drop reordering on desktop & mobile touch
+    const sortable = new Sortable(pagesList, {
+      animation: 180,
+      ghostClass: 'sortable-ghost',
+      filter: 'button, select, option',
+      preventOnFilter: false,
+      onEnd: function (evt) {
+        if (evt.oldIndex !== evt.newIndex) {
+          const movedItem = pages.splice(evt.oldIndex, 1)[0];
+          pages.splice(evt.newIndex, 0, movedItem);
+          setActiveStep(2);
+          invalidateGeneratedPdf();
+          renderPagesList();
+          showToast(`Reordered image to Page ${evt.newIndex + 1}`, 'info');
+        }
+      }
+    });
+
+    // Initialize default target size UI without jumping away from Step 1 on initial load
+    setTargetSizeKB(1024, false);
+    setActiveStep(1);
+
+    // Drag & drop support on Empty State Dropzone
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+      emptyStateContainer.addEventListener(eventName, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+      }, false);
+    });
+    emptyStateContainer.addEventListener('dragover', () => {
+      emptyStateContainer.classList.add('border-brand-500', 'bg-brand-50/40');
+    });
+    emptyStateContainer.addEventListener('dragleave', () => {
+      emptyStateContainer.classList.remove('border-brand-500', 'bg-brand-50/40');
+    });
+    emptyStateContainer.addEventListener('drop', (e) => {
+      emptyStateContainer.classList.remove('border-brand-500', 'bg-brand-50/40');
+      const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
+      if (files.length > 0) {
+        enqueueFilesForSequentialCrop(files);
+      } else {
+        showToast('Please drop valid image files (JPEG, PNG, WebP).', 'error');
+      }
+    });
+
+    // Trigger Single Image Upload
+    function triggerSingleUpload() {
+      setActiveStep(1);
+      singleFileInput.value = '';
+      singleFileInput.click();
+    }
+
+    // Trigger Multi Image Upload (queued sequentially)
+    function triggerMultiUpload() {
+      setActiveStep(1);
+      multiFileInput.value = '';
+      multiFileInput.click();
+    }
+
+    // Handle Single File Selection -> Open Cropper Immediately
+    singleFileInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      if (!file.type.startsWith('image/')) {
+        showToast('Unsupported file type. Please choose a JPEG, PNG, or WebP image.', 'error');
+        return;
+      }
+      batchTotalCount = 0;
+      batchProcessedCount = 0;
+      readFileAndOpenCropper(file, null);
+    });
+
+    // Handle Multiple Files Selection -> Queue and Crop One-by-One
+    multiFileInput.addEventListener('change', (e) => {
+      const files = Array.from(e.target.files).filter(f => f.type.startsWith('image/'));
+      if (files.length === 0) return;
+      enqueueFilesForSequentialCrop(files);
+    });
+
+    function enqueueFilesForSequentialCrop(files) {
+      setActiveStep(1);
+      if (pendingFileQueue.length === 0) {
+        batchTotalCount = files.length;
+        batchProcessedCount = 0;
+      } else {
+        batchTotalCount += files.length;
+      }
+      pendingFileQueue.push(...files);
+      processNextQueuedFile();
+    }
+
+    function processNextQueuedFile() {
+      if (pendingFileQueue.length === 0) {
+        batchTotalCount = 0;
+        batchProcessedCount = 0;
+        return;
+      }
+      batchProcessedCount += 1;
+      const nextFile = pendingFileQueue.shift();
+      readFileAndOpenCropper(nextFile, null);
+    }
+
+    // Read File as DataURL and Launch Interactive Crop Modal
+    function readFileAndOpenCropper(file, pageIndexToEdit) {
+      const reader = new FileReader();
+      reader.onload = function (event) {
+        openCropModal(event.target.result, pageIndexToEdit);
+      };
+      reader.onerror = function () {
+        showToast('Failed to read image file. Please try again.', 'error');
+      };
+      reader.readAsDataURL(file);
+    }
+
+    // Open Cropper Modal
+    function openCropModal(imageDataUrl, pageIndexToEdit = null) {
+      setActiveStep(1);
+      currentOriginalDataUrl = imageDataUrl;
+      editingPageIndex = pageIndexToEdit;
+
+      // Update modal header labels
+      const pageNum = pageIndexToEdit !== null ? pageIndexToEdit + 1 : pages.length + 1;
+      document.getElementById('cropModalPageBadge').textContent = `Page ${pageNum}`;
+      document.getElementById('cropModalTitle').textContent =
+        pageIndexToEdit !== null ? `Re-Crop Page ${pageNum}` : `Crop Image for Page ${pageNum}`;
+
+      const queueBadge = document.getElementById('queueCounterBadge');
+      const cropAndNextBtn = document.getElementById('cropAndNextBtn');
+
+      if (batchTotalCount > 1 && pageIndexToEdit === null) {
+        queueBadge.textContent = `Cropping image ${batchProcessedCount} of ${batchTotalCount}`;
+        queueBadge.classList.remove('hidden');
+        if (pendingFileQueue.length > 0) {
+          cropAndNextBtn.querySelector('span').textContent = `Crop & Next (${pendingFileQueue.length} left)`;
+        } else {
+          cropAndNextBtn.querySelector('span').textContent = 'Crop & Add Next Image';
+        }
+      } else {
+        queueBadge.classList.add('hidden');
+        cropAndNextBtn.querySelector('span').textContent =
+          pageIndexToEdit !== null ? 'Save & Add New Image' : 'Crop & Add Next Image';
+      }
+
+      // Reset aspect buttons highlight to Free
+      document.querySelectorAll('.aspect-btn').forEach((btn, idx) => {
+        if (idx === 0) {
+          btn.classList.add('bg-brand-600', 'text-white');
+          btn.classList.remove('bg-slate-100', 'text-slate-700');
+        } else {
+          btn.classList.remove('bg-brand-600', 'text-white');
+          btn.classList.add('bg-slate-100', 'text-slate-700');
+        }
+      });
+
+      // Destroy prior Cropper instance if active
+      if (cropperInstance) {
+        cropperInstance.destroy();
+        cropperInstance = null;
+      }
+
+      cropperTargetImage.src = imageDataUrl;
+      cropModal.classList.remove('hidden');
+
+      // Initialize Cropper.js once image loads in DOM
+      cropperTargetImage.onload = function () {
+        cropperInstance = new Cropper(cropperTargetImage, {
+          viewMode: 1,
+          dragMode: 'move',
+          autoCropArea: 0.92,
+          restore: false,
+          guides: true,
+          center: true,
+          highlight: false,
+          cropBoxMovable: true,
+          cropBoxResizable: true,
+          toggleDragModeOnDblclick: false,
+          background: false,
+        });
+      };
+    }
+
+    // Cropper Controls
+    function setCropAspectRatio(ratio, btnEl) {
+      if (!cropperInstance) return;
+      cropperInstance.setAspectRatio(ratio);
+      document.querySelectorAll('.aspect-btn').forEach(btn => {
+        btn.classList.remove('bg-brand-600', 'text-white');
+        btn.classList.add('bg-slate-100', 'text-slate-700');
+      });
+      if (btnEl) {
+        btnEl.classList.add('bg-brand-600', 'text-white');
+        btnEl.classList.remove('bg-slate-100', 'text-slate-700');
+      }
+    }
+
+    function rotateCropper(degrees) {
+      if (cropperInstance) cropperInstance.rotate(degrees);
+    }
+
+    function resetCropper() {
+      if (cropperInstance) cropperInstance.reset();
+    }
+
+    function cancelCurrentCrop() {
+      if (cropperInstance) {
+        cropperInstance.destroy();
+        cropperInstance = null;
+      }
+      cropModal.classList.add('hidden');
+      // If more files are queued from a multi-drop, continue sequentially
+      if (pendingFileQueue.length > 0) {
+        processNextQueuedFile();
+      } else {
+        batchTotalCount = 0;
+        batchProcessedCount = 0;
+        setActiveStep(pages.length > 0 ? 2 : 1);
+      }
+    }
+
+    /**
+     * Confirm Crop Action
+     * @param {boolean} addAnotherAfter - If true ("Crop & Add Next Image"), saves current page and immediately opens next file picker (or processes next queued file).
+     */
+    function confirmCrop(addAnotherAfter) {
+      if (!cropperInstance) return;
+
+      // Extract high-resolution cropped canvas (cap max dimension at 2600px to keep memory snappy while preserving crispness)
+      const croppedCanvas = cropperInstance.getCroppedCanvas({
+        maxWidth: 2600,
+        maxHeight: 2600,
+        fillColor: '#ffffff',
+        imageSmoothingEnabled: true,
+        imageSmoothingQuality: 'high',
+      });
+
+      if (!croppedCanvas) {
+        showToast('Could not crop image. Please try again.', 'error');
+        return;
+      }
+
+      const croppedDataUrl = croppedCanvas.toDataURL('image/jpeg', 0.94);
+
+      if (editingPageIndex !== null) {
+        pages[editingPageIndex] = {
+          ...pages[editingPageIndex],
+          croppedDataUrl: croppedDataUrl,
+          enhancedDataUrl: null, // Reset cached enhancement when re-cropped
+          width: croppedCanvas.width,
+          height: croppedCanvas.height,
+        };
+        showToast(`Updated Page ${editingPageIndex + 1}`, 'success');
+      } else {
+        pages.push({
+          id: 'page_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
+          originalDataUrl: currentOriginalDataUrl,
+          croppedDataUrl: croppedDataUrl,
+          enhancedDataUrl: null,
+          width: croppedCanvas.width,
+          height: croppedCanvas.height,
+        });
+        showToast(`Added Page ${pages.length}`, 'success');
+      }
+
+      // Clean up cropper
+      cropperInstance.destroy();
+      cropperInstance = null;
+      cropModal.classList.add('hidden');
+
+      invalidateGeneratedPdf();
+      renderPagesList();
+
+      // Sequential workflow continuation
+      if (pendingFileQueue.length > 0) {
+        setTimeout(() => processNextQueuedFile(), 150);
+      } else {
+        batchTotalCount = 0;
+        batchProcessedCount = 0;
+        if (addAnotherAfter) {
+          setActiveStep(1);
+          setTimeout(() => triggerSingleUpload(), 120);
+        } else {
+          // Finished cropping -> move highlight to Step 2 (Verify Order)
+          setActiveStep(2);
+        }
+      }
+    }
+
+    // Render Ordered Page Cards (1, 2, 3, 4...) with unified "Reorder" controls
+    function renderPagesList() {
+      if (pages.length === 0) {
+        emptyStateContainer.classList.remove('hidden');
+        activeWorkspace.classList.add('hidden');
+        setActiveStep(1);
+        return;
+      }
+
+      emptyStateContainer.classList.add('hidden');
+      activeWorkspace.classList.remove('hidden');
+
+      document.getElementById('pageCountBadge').textContent = `${pages.length} ${pages.length === 1 ? 'Page' : 'Pages'}`;
+      document.getElementById('nextPageNumberHint').textContent = pages.length + 1;
+
+      pagesList.innerHTML = '';
+
+      pages.forEach((page, index) => {
+        const pageNum = index + 1;
+        const card = document.createElement('div');
+        card.className = 'group relative bg-slate-50 rounded-2xl border border-slate-200 hover:border-brand-400 transition-all overflow-hidden flex flex-col shadow-xs cursor-grab active:cursor-grabbing';
+        card.dataset.id = page.id;
+
+        // Build direct "Move to Page #" options so user can jump any image to any position
+        let positionOptionsHtml = '';
+        for (let i = 0; i < pages.length; i++) {
+          positionOptionsHtml += `<option value="${i}" ${i === index ? 'selected' : ''}>#${i + 1}</option>`;
+        }
+
+        card.innerHTML = `
+          <!-- Top Badge, Direct Position Jump & Drag Handle -->
+          <div class="px-3 py-2 bg-white border-b border-slate-100 flex items-center justify-between gap-1.5">
+            <div class="flex items-center gap-1.5">
+              <span class="p-1 rounded-lg text-slate-400 group-hover:text-brand-600 transition" title="Drag card to reorder">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M4 8h16M4 16h16" />
+                </svg>
+              </span>
+              <span class="px-2.5 py-0.5 rounded-lg text-xs font-bold bg-brand-600 text-white shadow-xs">Page ${pageNum}</span>
+            </div>
+
+            <div class="flex items-center gap-1.5">
+              ${pages.length > 1 ? `
+              <label class="flex items-center gap-1 text-[11px] font-medium text-slate-500" title="Jump directly to page position">
+                <span>Pos:</span>
+                <select onchange="movePageToExactIndex(${index}, parseInt(this.value, 10))" class="px-1.5 py-0.5 rounded-md border border-slate-200 bg-slate-50 text-slate-800 font-bold text-[11px] focus:outline-none focus:ring-1 focus:ring-brand-500 cursor-pointer">
+                  ${positionOptionsHtml}
+                </select>
+              </label>
+              ` : `<span class="text-[11px] font-medium text-slate-400">${page.width}&times;${page.height}px</span>`}
+            </div>
+          </div>
+
+          <!-- Cropped Thumbnail Preview -->
+          <div class="relative aspect-[4/3] bg-slate-200/60 flex items-center justify-center p-2 overflow-hidden">
+            <img src="${page.croppedDataUrl}" alt="Page ${pageNum}" class="max-w-full max-h-full object-contain rounded shadow-xs pointer-events-none" />
+            <button type="button" onclick="openPageCompareModal(${index})" title="Preview Standard vs. Enhanced Scan" class="absolute bottom-2 right-2 px-2 py-1 rounded-lg bg-slate-900/75 hover:bg-brand-600 text-white text-[10px] font-semibold backdrop-blur-xs opacity-90 hover:opacity-100 transition">
+              Preview Filter
+            </button>
+          </div>
+
+          <!-- Card Action Controls: Unified "Reorder" Arrow Controls, Re-Crop, Delete -->
+          <div class="p-2.5 bg-white border-t border-slate-100 flex items-center justify-between gap-1">
+            <div class="inline-flex items-center rounded-xl border border-slate-200 bg-slate-50 overflow-hidden" title="Reorder page position">
+              <button type="button" onclick="movePage(${index}, -1)" ${index === 0 ? 'disabled' : ''} class="px-2 py-1.5 text-slate-700 hover:bg-brand-50 hover:text-brand-700 disabled:opacity-35 disabled:pointer-events-none transition" title="Reorder Earlier">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
+              </button>
+              <span class="px-1.5 text-[11px] font-bold text-slate-600 select-none border-x border-slate-200">Reorder</span>
+              <button type="button" onclick="movePage(${index}, 1)" ${index === pages.length - 1 ? 'disabled' : ''} class="px-2 py-1.5 text-slate-700 hover:bg-brand-50 hover:text-brand-700 disabled:opacity-35 disabled:pointer-events-none transition" title="Reorder Later">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+              </button>
+            </div>
+
+            <div class="flex items-center gap-1">
+              <button type="button" onclick="reCropPage(${index})" class="px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-brand-50 text-slate-700 hover:text-brand-700 text-xs font-semibold transition">
+                Re-Crop
+              </button>
+              <button type="button" onclick="deletePage(${index})" class="p-1.5 rounded-lg text-rose-500 hover:bg-rose-50 transition" title="Delete Page">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        `;
+        pagesList.appendChild(card);
+      });
+
+      updateCompressionGuidance();
+    }
+
+    function movePage(index, direction) {
+      const targetIndex = index + direction;
+      if (targetIndex < 0 || targetIndex >= pages.length) return;
+      const temp = pages[index];
+      pages[index] = pages[targetIndex];
+      pages[targetIndex] = temp;
+      setActiveStep(2);
+      invalidateGeneratedPdf();
+      renderPagesList();
+    }
+
+    function movePageToExactIndex(fromIndex, toIndex) {
+      if (fromIndex === toIndex || toIndex < 0 || toIndex >= pages.length) return;
+      const movedItem = pages.splice(fromIndex, 1)[0];
+      pages.splice(toIndex, 0, movedItem);
+      setActiveStep(2);
+      invalidateGeneratedPdf();
+      renderPagesList();
+      showToast(`Reordered image to Page ${toIndex + 1}`, 'info');
+    }
+
+    function reCropPage(index) {
+      const page = pages[index];
+      if (!page) return;
+      openCropModal(page.originalDataUrl, index);
+    }
+
+    function deletePage(index) {
+      pages.splice(index, 1);
+      setActiveStep(pages.length > 0 ? 2 : 1);
+      invalidateGeneratedPdf();
+      renderPagesList();
+      showToast('Page removed.', 'info');
+    }
+
+    function clearAllPages() {
+      pages = [];
+      pendingFileQueue = [];
+      setActiveStep(1);
+      invalidateGeneratedPdf();
+      renderPagesList();
+      showToast('All pages cleared.', 'info');
+    }
+
+    // =========================================================================
+    // PDF MODE SELECTION (STANDARD VS ENHANCED SCAN)
+    // =========================================================================
+
+    function selectPdfMode(mode) {
+      selectedPdfMode = mode;
+      setActiveStep(3);
+      invalidateGeneratedPdf();
+
+      const stdCard = document.getElementById('modeCardStandard');
+      const enhCard = document.getElementById('modeCardEnhanced');
+      const stdRadio = document.getElementById('modeRadioStandard');
+      const enhRadio = document.getElementById('modeRadioEnhanced');
+
+      if (mode === 'standard') {
+        stdCard.className = 'p-3.5 rounded-2xl border-2 border-brand-600 bg-brand-50/40 cursor-pointer transition-all';
+        stdRadio.className = 'w-4 h-4 mt-0.5 rounded-full border-4 border-brand-600 bg-white shrink-0';
+        enhCard.className = 'p-3.5 rounded-2xl border-2 border-slate-200 hover:border-brand-400 bg-white cursor-pointer transition-all';
+        enhRadio.className = 'w-4 h-4 mt-0.5 rounded-full border-2 border-slate-300 bg-white shrink-0';
+      } else {
+        enhCard.className = 'p-3.5 rounded-2xl border-2 border-brand-600 bg-brand-50/40 cursor-pointer transition-all';
+        enhRadio.className = 'w-4 h-4 mt-0.5 rounded-full border-4 border-brand-600 bg-white shrink-0';
+        stdCard.className = 'p-3.5 rounded-2xl border-2 border-slate-200 hover:border-brand-400 bg-white cursor-pointer transition-all';
+        stdRadio.className = 'w-4 h-4 mt-0.5 rounded-full border-2 border-slate-300 bg-white shrink-0';
+      }
+    }
+
+    // =========================================================================
+    // DOCUMENT ENHANCEMENT PIPELINE (SHADOW REMOVAL + TEXT PRESERVATION)
+    // =========================================================================
+
+    /**
+     * Enhances a scanned/photographed document image while preserving all text/ink:
+     * 1. Estimates slow-varying paper illumination & uneven gray shadows via multi-pass
+     *    separable box-blur on a downsampled luminance map (large kernel ~1/12th image width).
+     * 2. Normalizes each RGB pixel against the local background luminance (divisive illumination
+     *    correction) so gray shadows become clean white paper without erasing faint text.
+     * 3. Applies gentle S-curve white-point stretch & edge-preserving unsharp mask so dark
+     *    text, signatures, and stamps stay crisp and high-contrast.
+     */
+    async function enhanceDocumentDataUrl(croppedDataUrl) {
+      const img = await loadImageElement(croppedDataUrl);
+      const w = img.naturalWidth;
+      const h = img.naturalHeight;
+
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      ctx.drawImage(img, 0, 0, w, h);
+
+      const imgData = ctx.getImageData(0, 0, w, h);
+      const data = imgData.data;
+
+      // Step 1: Compute downsampled luminance map (max 320px wide) for fast large-radius background estimation
+      const dsScale = Math.min(1, 320 / Math.max(w, h));
+      const dw = Math.max(16, Math.round(w * dsScale));
+      const dh = Math.max(16, Math.round(h * dsScale));
+
+      const lumSmall = new Float32Array(dw * dh);
+      for (let y = 0; y < dh; y++) {
+        const srcY = Math.min(h - 1, Math.floor(y / dsScale));
+        for (let x = 0; x < dw; x++) {
+          const srcX = Math.min(w - 1, Math.floor(x / dsScale));
+          const idx = (srcY * w + srcX) * 4;
+          // Use max-channel biased luminance so colored ink/stamps don't falsely depress background estimate
+          const r = data[idx];
+          const g = data[idx + 1];
+          const b = data[idx + 2];
+          lumSmall[y * dw + x] = 0.299 * r + 0.587 * g + 0.114 * b;
+        }
+      }
+
+      // Apply morphological dilation (local max filter) + 2-pass box blur to estimate pure paper illumination
+      // Dilation ignores dark text strokes so text never causes halo artifacts!
+      const dilateRadius = Math.max(3, Math.round(Math.min(dw, dh) * 0.025));
+      const dilated = morphologicalMax2D(lumSmall, dw, dh, dilateRadius);
+      const blurRadius = Math.max(6, Math.round(Math.min(dw, dh) * 0.06));
+      const bgMap = boxBlur2D(boxBlur2D(dilated, dw, dh, blurRadius), dw, dh, blurRadius);
+
+      // Step 2: Bilinear upsample background illumination map and normalize pixel RGB values
+      for (let y = 0; y < h; y++) {
+        const fy = (y / h) * (dh - 1);
+        const y0 = Math.floor(fy);
+        const y1 = Math.min(dh - 1, y0 + 1);
+        const wy = fy - y0;
+
+        for (let x = 0; x < w; x++) {
+          const fx = (x / w) * (dw - 1);
+          const x0 = Math.floor(fx);
+          const x1 = Math.min(dw - 1, x0 + 1);
+          const wx = fx - x0;
+
+          // Bilinear interpolation of local paper illumination
+          const top = bgMap[y0 * dw + x0] * (1 - wx) + bgMap[y0 * dw + x1] * wx;
+          const bot = bgMap[y1 * dw + x0] * (1 - wx) + bgMap[y1 * dw + x1] * wx;
+          const localBg = Math.max(45, top * (1 - wy) + bot * wy);
+
+          const idx = (y * w + x) * 4;
+          const gain = 252.0 / localBg;
+
+          let r = data[idx] * gain;
+          let g = data[idx + 1] * gain;
+          let b = data[idx + 2] * gain;
+
+          // Soft white-point cleanup for near-white paper (above 222) while preserving midtones & dark text
+          r = applyDocumentToneCurve(r);
+          g = applyDocumentToneCurve(g);
+          b = applyDocumentToneCurve(b);
+
+          data[idx] = r;
+          data[idx + 1] = g;
+          data[idx + 2] = b;
+        }
+      }
+
+      // Step 3: Subtle edge-aware unsharp mask to keep fine text crisp
+      const sharpened = applyUnsharpMask(data, w, h, 0.38);
+      imgData.data.set(sharpened);
+      ctx.putImageData(imgData, 0, 0);
+
+      return canvas.toDataURL('image/jpeg', 0.94);
+    }
+
+    // Tone curve: cleans light gray paper noise into pure white while darkening/preserving ink strokes
+    function applyDocumentToneCurve(val) {
+      if (val >= 255) return 255;
+      if (val <= 0) return 0;
+      // Gently lift paper background (>212) to clean white (255)
+      if (val > 212) {
+        const t = (val - 212) / (255 - 212);
+        return Math.min(255, Math.round(212 + Math.pow(t, 0.65) * 43));
+      }
+      // Slightly deepen dark ink/text (<140) for crisp legibility without clipping details
+      if (val < 140) {
+        const t = val / 140;
+        return Math.max(0, Math.round(Math.pow(t, 1.12) * 140));
+      }
+      return Math.round(val);
+    }
+
+    // Separable 2D local max filter (removes text strokes from background illumination estimate)
+    function morphologicalMax2D(src, w, h, radius) {
+      const temp = new Float32Array(w * h);
+      const dst = new Float32Array(w * h);
+
+      for (let y = 0; y < h; y++) {
+        const rowOff = y * w;
+        for (let x = 0; x < w; x++) {
+          let maxVal = 0;
+          const xStart = Math.max(0, x - radius);
+          const xEnd = Math.min(w - 1, x + radius);
+          for (let kx = xStart; kx <= xEnd; kx++) {
+            const v = src[rowOff + kx];
+            if (v > maxVal) maxVal = v;
+          }
+          temp[rowOff + x] = maxVal;
+        }
+      }
+
+      for (let x = 0; x < w; x++) {
+        for (let y = 0; y < h; y++) {
+          let maxVal = 0;
+          const yStart = Math.max(0, y - radius);
+          const yEnd = Math.min(h - 1, y + radius);
+          for (let ky = yStart; ky <= yEnd; ky++) {
+            const v = temp[ky * w + x];
+            if (v > maxVal) maxVal = v;
+          }
+          dst[y * w + x] = maxVal;
+        }
+      }
+      return dst;
+    }
+
+    // Fast separable 2D box blur using running sums
+    function boxBlur2D(src, w, h, radius) {
+      const temp = new Float32Array(w * h);
+      const dst = new Float32Array(w * h);
+
+      for (let y = 0; y < h; y++) {
+        const rowOff = y * w;
+        let sum = 0;
+        let count = 0;
+        for (let kx = 0; kx <= Math.min(w - 1, radius); kx++) {
+          sum += src[rowOff + kx];
+          count++;
+        }
+        for (let x = 0; x < w; x++) {
+          temp[rowOff + x] = sum / count;
+          const addIdx = x + radius + 1;
+          if (addIdx < w) {
+            sum += src[rowOff + addIdx];
+            count++;
+          }
+          const remIdx = x - radius;
+          if (remIdx >= 0) {
+            sum -= src[rowOff + remIdx];
+            count--;
+          }
+        }
+      }
+
+      for (let x = 0; x < w; x++) {
+        let sum = 0;
+        let count = 0;
+        for (let ky = 0; ky <= Math.min(h - 1, radius); ky++) {
+          sum += temp[ky * w + x];
+          count++;
+        }
+        for (let y = 0; y < h; y++) {
+          dst[y * w + x] = sum / count;
+          const addIdx = y + radius + 1;
+          if (addIdx < h) {
+            sum += temp[addIdx * w + x];
+            count++;
+          }
+          const remIdx = y - radius;
+          if (remIdx >= 0) {
+            sum -= temp[remIdx * w + x];
+            count--;
+          }
+        }
+      }
+      return dst;
+    }
+
+    // Lightweight 3x3 unsharp mask for crisp text edges
+    function applyUnsharpMask(rgba, w, h, amount) {
+      const out = new Uint8ClampedArray(rgba.length);
+      out.set(rgba);
+
+      for (let y = 1; y < h - 1; y++) {
+        for (let x = 1; x < w - 1; x++) {
+          const idx = (y * w + x) * 4;
+          for (let c = 0; c < 3; c++) {
+            const center = rgba[idx + c];
+            const neighbors =
+              rgba[((y - 1) * w + x) * 4 + c] +
+              rgba[((y + 1) * w + x) * 4 + c] +
+              rgba[(y * w + (x - 1)) * 4 + c] +
+              rgba[(y * w + (x + 1)) * 4 + c];
+            const blur = neighbors * 0.25;
+            const diff = center - blur;
+            // Ignore tiny sensor grain (< 6), sharpen real text edges
+            if (Math.abs(diff) > 6) {
+              out[idx + c] = Math.max(0, Math.min(255, Math.round(center + diff * amount)));
+            }
+          }
+        }
+      }
+      return out;
+    }
+
+    // Get or compute enhanced DataURL for a given page index
+    async function getEnhancedDataUrlForPage(index) {
+      const page = pages[index];
+      if (!page) return null;
+      if (!page.enhancedDataUrl) {
+        page.enhancedDataUrl = await enhanceDocumentDataUrl(page.croppedDataUrl);
+      }
+      return page.enhancedDataUrl;
+    }
+
+    // =========================================================================
+    // STANDARD VS ENHANCED COMPARISON MODAL
+    // =========================================================================
+
+    async function openPageCompareModal(index) {
+      if (pages.length === 0) return;
+      comparePageIndex = Math.max(0, Math.min(pages.length - 1, index));
+      document.getElementById('compareModal').classList.remove('hidden');
+      await renderCompareModalContent();
+    }
+
+    async function renderCompareModalContent() {
+      const page = pages[comparePageIndex];
+      if (!page) return;
+
+      document.getElementById('comparePageIndicator').textContent = `Page ${comparePageIndex + 1} of ${pages.length}`;
+      document.getElementById('comparePrevBtn').disabled = comparePageIndex === 0;
+      document.getElementById('compareNextBtn').disabled = comparePageIndex === pages.length - 1;
+
+      document.getElementById('compareStandardImg').src = page.croppedDataUrl;
+      document.getElementById('compareEnhancedImg').src = page.croppedDataUrl; // Temporary placeholder while computing
+
+      const enhancedUrl = await getEnhancedDataUrlForPage(comparePageIndex);
+      if (enhancedUrl) {
+        document.getElementById('compareEnhancedImg').src = enhancedUrl;
+      }
+    }
+
+    async function navigateComparePage(delta) {
+      const nextIdx = comparePageIndex + delta;
+      if (nextIdx < 0 || nextIdx >= pages.length) return;
+      comparePageIndex = nextIdx;
+      await renderCompareModalContent();
+    }
+
+    function closeCompareModal() {
+      document.getElementById('compareModal').classList.add('hidden');
+    }
+
+    // =========================================================================
+    // TARGET FILE SIZE CONTROLS (100 KB to 10 MB / 10,240 KB)
+    // =========================================================================
+
+    function setTargetSizeKB(kb, activateStep3 = true) {
+      kb = Math.max(100, Math.min(10240, Math.round(kb)));
+      targetSizeKB = kb;
+      if (activateStep3) setActiveStep(3);
+      invalidateGeneratedPdf();
+
+      // Update preset buttons styling
+      document.querySelectorAll('.size-preset-btn').forEach(btn => {
+        const btnKB = parseInt(btn.dataset.kb, 10);
+        if (btnKB === kb) {
+          btn.classList.add('bg-brand-600', 'text-white', 'border-brand-600');
+          btn.classList.remove('border-slate-200', 'text-slate-700');
+        } else {
+          btn.classList.remove('bg-brand-600', 'text-white', 'border-brand-600');
+          btn.classList.add('border-slate-200', 'text-slate-700');
+        }
+      });
+
+      // Sync logarithmic slider (100 KB -> 0, 10240 KB -> 1000)
+      const minLog = Math.log(100);
+      const maxLog = Math.log(10240);
+      const sliderVal = Math.round(((Math.log(kb) - minLog) / (maxLog - minLog)) * 1000);
+      document.getElementById('targetSizeSlider').value = sliderVal;
+
+      // Sync manual input field
+      const unitSelect = document.getElementById('customSizeUnit');
+      const numInput = document.getElementById('customSizeNumber');
+      if (kb >= 1024 && kb % 1024 === 0) {
+        unitSelect.value = 'MB';
+        numInput.value = kb / 1024;
+        numInput.min = 0.1;
+        numInput.max = 10;
+        numInput.step = 0.1;
+      } else if (unitSelect.value === 'MB') {
+        numInput.value = (kb / 1024).toFixed(2);
+      } else {
+        unitSelect.value = 'KB';
+        numInput.value = kb;
+        numInput.min = 100;
+        numInput.max = 10240;
+        numInput.step = 10;
+      }
+
+      // Formatted display badge
+      const displayStr = kb >= 1024
+        ? `${(kb / 1024).toFixed(2)} MB (${kb.toLocaleString()} KB)`
+        : `${kb} KB`;
+      document.getElementById('formattedTargetDisplay').textContent = displayStr;
+
+      updateCompressionGuidance();
+    }
+
+    function handleSliderInput(sliderVal) {
+      const minLog = Math.log(100);
+      const maxLog = Math.log(10240);
+      const kb = Math.round(Math.exp(minLog + (sliderVal / 1000) * (maxLog - minLog)));
+      document.getElementById('customSizeUnit').value = 'KB';
+      setTargetSizeKB(kb, true);
+    }
+
+    function handleManualUnitChange() {
+      setActiveStep(3);
+      const unit = document.getElementById('customSizeUnit').value;
+      const numInput = document.getElementById('customSizeNumber');
+      if (unit === 'MB') {
+        numInput.min = 0.1;
+        numInput.max = 10;
+        numInput.step = 0.1;
+        numInput.value = Math.max(0.1, Math.min(10, (targetSizeKB / 1024))).toFixed(2);
+      } else {
+        numInput.min = 100;
+        numInput.max = 10240;
+        numInput.step = 10;
+        numInput.value = targetSizeKB;
+      }
+    }
+
+    function handleManualNumberInput() {
+      setActiveStep(3);
+      const unit = document.getElementById('customSizeUnit').value;
+      const val = parseFloat(document.getElementById('customSizeNumber').value);
+      if (isNaN(val)) return;
+      const kb = unit === 'MB' ? Math.round(val * 1024) : Math.round(val);
+      targetSizeKB = Math.max(100, Math.min(10240, kb));
+      invalidateGeneratedPdf();
+
+      const displayStr = targetSizeKB >= 1024
+        ? `${(targetSizeKB / 1024).toFixed(2)} MB (${targetSizeKB.toLocaleString()} KB)`
+        : `${targetSizeKB} KB`;
+      document.getElementById('formattedTargetDisplay').textContent = displayStr;
+
+      const minLog = Math.log(100);
+      const maxLog = Math.log(10240);
+      const sliderVal = Math.round(((Math.log(targetSizeKB) - minLog) / (maxLog - minLog)) * 1000);
+      document.getElementById('targetSizeSlider').value = sliderVal;
+
+      updateCompressionGuidance();
+    }
+
+    function updateCompressionGuidance() {
+      const count = Math.max(1, pages.length);
+      const kbPerPage = Math.round(targetSizeKB / count);
+      const box = document.getElementById('compressionGuidanceBox');
+      const text = document.getElementById('compressionGuidanceText');
+
+      if (kbPerPage < 35) {
+        box.className = 'rounded-2xl p-3.5 text-xs mb-4 bg-amber-50 text-amber-900 border border-amber-200 flex items-start gap-2.5';
+        text.innerHTML = `<strong>High Compression (~${kbPerPage} KB/page):</strong> Fitting ${count} pages into ${formatBytes(targetSizeKB * 1024)} requires aggressive downscaling. Fine text may look softer.`;
+      } else if (kbPerPage < 150) {
+        box.className = 'rounded-2xl p-3.5 text-xs mb-4 bg-blue-50 text-blue-800 border border-blue-200 flex items-start gap-2.5';
+        text.innerHTML = `<strong>Compact Web Quality (~${kbPerPage} KB/page):</strong> Ideal for email attachments and portals while keeping documents legible.`;
+      } else {
+        box.className = 'rounded-2xl p-3.5 text-xs mb-4 bg-emerald-50 text-emerald-800 border border-emerald-200 flex items-start gap-2.5';
+        text.innerHTML = `<strong>High Clarity (~${kbPerPage} KB/page):</strong> Plenty of size budget for sharp, high-resolution pages.`;
+      }
+    }
+
+    // =========================================================================
+    // CLIENT-SIDE ITERATIVE COMPRESSION & PDF GENERATION ENGINE (jsPDF)
+    // =========================================================================
+
+    function invalidateGeneratedPdf() {
+      if (generatedPdfUrl) {
+        URL.revokeObjectURL(generatedPdfUrl);
+        generatedPdfUrl = null;
+      }
+      generatedPdfBlob = null;
+      document.getElementById('pdfResultCard').classList.add('hidden');
+    }
+
+    // Load an Image object asynchronously from DataURL
+    function loadImageElement(dataUrl) {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = reject;
+        img.src = dataUrl;
+      });
+    }
+
+    // Re-encode an image element with a given scale factor and JPEG quality
+    function compressImageToJpeg(img, scale, quality) {
+      const targetW = Math.max(120, Math.round(img.naturalWidth * scale));
+      const targetH = Math.max(120, Math.round(img.naturalHeight * scale));
+
+      const canvas = document.createElement('canvas');
+      canvas.width = targetW;
+      canvas.height = targetH;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, targetW, targetH);
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(img, 0, 0, targetW, targetH);
+
+      return {
+        dataUrl: canvas.toDataURL('image/jpeg', quality),
+        width: targetW,
+        height: targetH
+      };
+    }
+
+    // Assemble a jsPDF Blob from pre-compressed page images
+    function buildPdfBlobFromImages(compressedImages, pageFormatMode) {
+      const { jsPDF } = window.jspdf;
+      let doc = null;
+
+      compressedImages.forEach((item, index) => {
+        const isLandscape = item.width > item.height;
+
+        if (pageFormatMode === 'match-image') {
+          const ptW = item.width * 0.75;
+          const ptH = item.height * 0.75;
+          const orientation = ptW > ptH ? 'l' : 'p';
+          if (index === 0) {
+            doc = new jsPDF({ orientation, unit: 'pt', format: [ptW, ptH], compress: true });
+          } else {
+            doc.addPage([ptW, ptH], orientation);
+          }
+          doc.addImage(item.dataUrl, 'JPEG', 0, 0, ptW, ptH, undefined, 'FAST');
+        } else {
+          const orientation = (pageFormatMode === 'a4-fit' && isLandscape) ? 'l' : 'p';
+          if (index === 0) {
+            doc = new jsPDF({ orientation, unit: 'pt', format: 'a4', compress: true });
+          } else {
+            doc.addPage('a4', orientation);
+          }
+
+          const pageWidth = doc.internal.pageSize.getWidth();
+          const pageHeight = doc.internal.pageSize.getHeight();
+          const margin = 20;
+          const maxW = pageWidth - margin * 2;
+          const maxH = pageHeight - margin * 2;
+
+          const imgRatio = item.width / item.height;
+          const boxRatio = maxW / maxH;
+
+          let drawW, drawH;
+          if (imgRatio > boxRatio) {
+            drawW = maxW;
+            drawH = maxW / imgRatio;
+          } else {
+            drawH = maxH;
+            drawW = maxH * imgRatio;
+          }
+
+          const offsetX = (pageWidth - drawW) / 2;
+          const offsetY = (pageHeight - drawH) / 2;
+
+          doc.addImage(item.dataUrl, 'JPEG', offsetX, offsetY, drawW, drawH, undefined, 'FAST');
+        }
+      });
+
+      return doc.output('blob');
+    }
+
+    // Main Multi-Pass Compression & PDF Creation Routine (supports 'standard' and 'enhanced')
+    async function generateCompressedPDF(mode = selectedPdfMode) {
+      if (pages.length === 0) {
+        showToast('Please add and crop at least one image first.', 'error');
+        return;
+      }
+
+      selectPdfMode(mode);
+      setActiveStep(3);
+
+      const stdBtn = document.getElementById('createStandardPdfBtn');
+      const enhBtn = document.getElementById('createEnhancedPdfBtn');
+      const progressContainer = document.getElementById('progressContainer');
+      const progressBarFill = document.getElementById('progressBarFill');
+      const progressStatusLabel = document.getElementById('progressStatusLabel');
+      const progressPercentLabel = document.getElementById('progressPercentLabel');
+
+      stdBtn.disabled = true;
+      enhBtn.disabled = true;
+      progressContainer.classList.remove('hidden');
+      document.getElementById('pdfResultCard').classList.add('hidden');
+
+      const updateProgress = (pct, label) => {
+        progressBarFill.style.width = `${pct}%`;
+        progressPercentLabel.textContent = `${pct}%`;
+        progressStatusLabel.textContent = label;
+      };
+
+      try {
+        const sourceUrls = [];
+        if (mode === 'enhanced') {
+          for (let i = 0; i < pages.length; i++) {
+            const pct = Math.round(((i + 1) / pages.length) * 28);
+            updateProgress(pct, `Removing shadows & enhancing Page ${i + 1}/${pages.length}...`);
+            await new Promise(r => setTimeout(r, 15));
+            const enhancedUrl = await getEnhancedDataUrlForPage(i);
+            sourceUrls.push(enhancedUrl);
+          }
+        } else {
+          updateProgress(15, 'Loading cropped pages...');
+          await new Promise(r => setTimeout(r, 20));
+          pages.forEach(p => sourceUrls.push(p.croppedDataUrl));
+        }
+
+        const loadedImages = await Promise.all(sourceUrls.map(url => loadImageElement(url)));
+        const pageFormatMode = document.getElementById('pdfPageFormat').value;
+        const targetBytes = targetSizeKB * 1024;
+
+        // Pass 1: High quality (scale 1.0, quality 0.92)
+        updateProgress(35, 'Testing full-resolution PDF size...');
+        await new Promise(r => setTimeout(r, 20));
+
+        let bestCompressed = loadedImages.map(img => compressImageToJpeg(img, 1.0, 0.92));
+        let bestBlob = buildPdfBlobFromImages(bestCompressed, pageFormatMode);
+
+        // If full resolution already fits under targetBytes, we are done!
+        if (bestBlob.size <= targetBytes) {
+          updateProgress(100, 'Optimal quality achieved!');
+        } else {
+          // Iterative Binary Search across combined scale + quality parameter space
+          let low = 0.02;
+          let high = 0.98;
+          let candidateUnderTarget = null;
+          const maxIterations = 7;
+
+          for (let iter = 1; iter <= maxIterations; iter++) {
+            const mid = (low + high) / 2;
+            const scale = Math.min(1.0, Math.max(0.18, 0.18 + mid * 0.82));
+            const quality = Math.min(0.92, Math.max(0.12, 0.12 + mid * 0.80));
+
+            const pct = 35 + Math.round((iter / maxIterations) * 60);
+            updateProgress(pct, `Optimizing size (Pass ${iter}/${maxIterations})...`);
+            await new Promise(r => setTimeout(r, 15));
+
+            const attemptImages = loadedImages.map(img => compressImageToJpeg(img, scale, quality));
+            const attemptBlob = buildPdfBlobFromImages(attemptImages, pageFormatMode);
+
+            if (attemptBlob.size <= targetBytes) {
+              candidateUnderTarget = attemptBlob;
+              low = mid;
+            } else {
+              high = mid;
+            }
+          }
+
+          if (candidateUnderTarget) {
+            bestBlob = candidateUnderTarget;
+          } else {
+            updateProgress(96, 'Applying maximum compression...');
+            const minImages = loadedImages.map(img => compressImageToJpeg(img, 0.15, 0.12));
+            bestBlob = buildPdfBlobFromImages(minImages, pageFormatMode);
+          }
+          updateProgress(100, 'Compression complete!');
+        }
+
+        // Store generated blob & create download URL
+        invalidateGeneratedPdf();
+        generatedPdfBlob = bestBlob;
+        generatedPdfUrl = URL.createObjectURL(bestBlob);
+
+        const finalSizeStr = formatBytes(bestBlob.size);
+        const targetSizeStr = formatBytes(targetBytes);
+        const modeLabel = mode === 'enhanced' ? 'Enhanced Document Scan' : 'Standard PDF';
+
+        document.getElementById('pdfResultModeBadge').textContent = modeLabel;
+        document.getElementById('pdfResultStats').textContent =
+          `Final Size: ${finalSizeStr} (Target Limit: ${targetSizeStr}) • ${pages.length} ${pages.length === 1 ? 'Page' : 'Pages'}`;
+
+        document.getElementById('pdfResultCard').classList.remove('hidden');
+        showToast(`${modeLabel} created (${finalSizeStr})!`, 'success');
+
+      } catch (err) {
+        console.error(err);
+        showToast('An error occurred while generating the PDF.', 'error');
+      } finally {
+        stdBtn.disabled = false;
+        enhBtn.disabled = false;
+        setTimeout(() => {
+          progressContainer.classList.add('hidden');
+        }, 900);
+      }
+    }
+
+    function getSanitizedFilename() {
+      const raw = document.getElementById('pdfFilename').value.trim() || 'Consolidated_Document';
+      const suffix = selectedPdfMode === 'enhanced' ? '_Enhanced' : '';
+      return raw.replace(/[^a-zA-Z0-9_\- ]/g, '_') + suffix + '.pdf';
+    }
+
+    function triggerPdfDownload() {
+      if (!generatedPdfUrl) return;
+      const a = document.createElement('a');
+      a.href = generatedPdfUrl;
+      a.download = getSanitizedFilename();
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }
+
+    function openPdfViewerModal() {
+      if (!generatedPdfUrl) return;
+      document.getElementById('pdfViewerTitle').textContent = getSanitizedFilename();
+      document.getElementById('pdfViewerSizeBadge').textContent = generatedPdfBlob ? formatBytes(generatedPdfBlob.size) : '';
+      document.getElementById('pdfPreviewIframe').src = generatedPdfUrl;
+      document.getElementById('pdfViewerModal').classList.remove('hidden');
+    }
+
+    function closePdfViewerModal() {
+      document.getElementById('pdfViewerModal').classList.add('hidden');
+      document.getElementById('pdfPreviewIframe').src = '';
+    }
+
+    // =========================================================================
+    // UTILITIES
+    // =========================================================================
+
+    function formatBytes(bytes) {
+      if (bytes < 1024) return bytes + ' B';
+      const kb = bytes / 1024;
+      if (kb < 1024) return kb.toFixed(1) + ' KB';
+      return (kb / 1024).toFixed(2) + ' MB';
+    }
+
+    function showToast(message, type = 'info') {
+      const container = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+      const colors = {
+        success: 'bg-slate-900 text-white border-emerald-500',
+        error: 'bg-rose-900 text-white border-rose-400',
+        info: 'bg-slate-800 text-white border-brand-400'
+      };
+      toast.className = `pointer-events-auto px-4 py-3 rounded-xl shadow-lg border-l-4 text-xs sm:text-sm font-medium transition-all duration-300 transform translate-y-0 ${colors[type] || colors.info}`;
+      toast.textContent = message;
+      container.appendChild(toast);
+
+      setTimeout(() => {
+        toast.classList.add('opacity-0', 'translate-y-2');
+        setTimeout(() => toast.remove(), 300);
+      }, 3000);
+    }
+  </script>
+</body>
+</html>
